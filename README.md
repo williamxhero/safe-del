@@ -89,8 +89,6 @@ safe-del [选项] 目标 [目标 ...]
 匹配到的目标会被移动到回收站，不会直接永久删除。 
 常见兼容参数: 
 /q 静默模式 
-/s 通配符递归匹配子目录
--r -R 通配符递归匹配子目录
---recursive 通配符递归匹配子目录
-/f /p /a /a:... -f --force --interactive=never 接受并兼容，但不改变删除行为
+/s -r -R --recursive 通配符递归匹配子目录
+/f /p /a /a:... -f --force --interactive=never 接受并兼容，当前不改变删除行为。
 ```
