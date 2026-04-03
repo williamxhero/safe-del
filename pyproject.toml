@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safe-del"
+version = "0.1.0"
+description = "将文件或目录移动到回收站的 Windows 删除命令替代工具"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["Send2Trash>=1.8"]
+
+[project.scripts]
+safe-del = "safe_del.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
