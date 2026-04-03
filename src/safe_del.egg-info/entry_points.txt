@@ -1,0 +1,3 @@
+[console_scripts]
+safe-del = safe_del.cli:main
+safe-del-install = safe_del.install_cli:main

@@ -12,6 +12,7 @@ dependencies = ["Send2Trash>=1.8"]
 
 [project.scripts]
 safe-del = "safe_del.cli:main"
+safe-del-install = "safe_del.install_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

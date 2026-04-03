@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+src/safe_del/__init__.py
+src/safe_del/api.py
+src/safe_del/arguments.py
+src/safe_del/cli.py
+src/safe_del/install_cli.py
+src/safe_del/models.py
+src/safe_del/resolver.py
+src/safe_del/service.py
+src/safe_del.egg-info/PKG-INFO
+src/safe_del.egg-info/SOURCES.txt
+src/safe_del.egg-info/dependency_links.txt
+src/safe_del.egg-info/entry_points.txt
+src/safe_del.egg-info/requires.txt
+src/safe_del.egg-info/top_level.txt
