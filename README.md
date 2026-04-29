@@ -1,10 +1,14 @@
 # safe-del
 
+[English](README_EN.md) | 中文
+
 为 AI 和 Agent 打造的 删除工具。当我的 D 盘被 Codex 彻底清空，花了 500 块钱也没有恢复数据后，我痛定思痛，让 Codex 帮我写了这个，专门面向 AI，XX Code 和 AI Agent 的删除工具。
 
 `safe-del` 是跨平台安全删除命令，当前支持 Windows 和 Ubuntu/Linux。
 
 它不会直接永久删除文件，而是把目标移动到系统回收站。
+
+
 
 ## 安装
 
@@ -33,6 +37,8 @@ Ubuntu/Linux:
 ```bash
 safe-del ~/downloads/*.tmp
 ```
+
+
 
 ## 基本用法
 
@@ -77,6 +83,8 @@ safe-del ~/work/build
 - 没有匹配到的目标会单独列出，并返回非零退出码。
 - 为防止误删，Windows 下禁止删除整个分区或分区根下全部内容，例如 `C:`、`D:\`、`C:\*`、`C:\*.*`、`E:\**`。
 - 为防止误删，Ubuntu/Linux 下禁止删除系统根目录或根目录下全部内容，例如 `/`、`/*`、`/*.*`、`/**`、`/**/*`。
+
+
 
 ## 本机命令映射
 
@@ -133,6 +141,8 @@ Ubuntu/Linux 安装动作包括：
 - 不覆盖脚本内部显式调用 `command rm`、`/bin/rm`、`/usr/bin/rm` 等真实删除命令
 - 不覆盖第三方程序直接调用系统删除 API
 - 不覆盖 Git Bash、WSL、BusyBox 等没有加载上述 profile 的其他 shell 自带删除实现
+
+
 
 ## 示例
 
