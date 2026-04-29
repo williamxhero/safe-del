@@ -18,11 +18,16 @@ def validate_delete_targets(targets: Sequence[str]) -> None:
     if dangerous_targets:
         joined_targets = ", ".join(dangerous_targets)
         raise DangerousTargetError(
-            f"禁止删除整个分区或分区根下全部内容: {joined_targets}"
+            f"禁止删除整个分区、系统根目录或根目录下全部内容: {joined_targets}"
         )
 
 
 def is_dangerous_target(target: str) -> bool:
+    if is_posix_root_target(target):
+        return True
+    if has_wildcard(target) and is_posix_root_wildcard_target(target):
+        return True
+
     normalized = normalize_target(target)
     if is_drive_only_target(normalized):
         return True
@@ -45,8 +50,27 @@ def is_drive_root_target(target: str) -> bool:
     return bool(_DRIVE_ROOT_PATTERN.fullmatch(target))
 
 
+def is_posix_root_target(target: str) -> bool:
+    return target in {"/", "//"}
+
+
 def has_wildcard(target: str) -> bool:
     return any(char in target for char in _WILDCARD_CHARS)
+
+
+def is_posix_root_wildcard_target(target: str) -> bool:
+    if not target.startswith("/"):
+        return False
+
+    parts = [part for part in target.split("/") if part != ""]
+    if not parts:
+        return False
+
+    for part in parts:
+        if part not in _ROOT_WILDCARD_PARTS:
+            return False
+
+    return True
 
 
 def is_drive_root_wildcard_target(target: str) -> bool:

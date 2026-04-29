@@ -2,9 +2,9 @@ import os
 import shutil
 import subprocess
 import sys
-import winreg
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TypeAlias
 
 
 HELP_TEXT = """\
@@ -15,7 +15,7 @@ HELP_TEXT = """\
   为当前用户安装 safe-del 的命令映射。
 
 覆盖范围:
-  PowerShell:
+  Windows PowerShell:
     Remove-Item
     del
     erase
@@ -23,20 +23,24 @@ HELP_TEXT = """\
     rd
     ri
     rmdir
-  cmd:
+  Windows cmd:
     del
     erase
     rd
     rmdir
     rm
     unlink
+  Ubuntu/Linux POSIX shell:
+    rm
+    rmdir
+    unlink
+    del
+    erase
+    rd
 
 限制:
-  只覆盖会加载 profile 的 PowerShell 会话。
-  只覆盖未显式关闭 AutoRun 的 cmd 会话。
-  不覆盖批处理内部命令展开。
-  不覆盖第三方程序直接调用系统删除 API。
-  不覆盖其他 shell 自带的删除实现。
+  只覆盖会加载 profile 的交互式 shell 会话。
+  不覆盖脚本内部显式调用 command rm、/bin/rm 或系统删除 API。
 """
 
 
@@ -61,7 +65,7 @@ class ProfileTarget:
 
 
 @dataclass(frozen=True)
-class InstallContext:
+class WindowsInstallContext:
     install_root: str
     powershell_hook_path: str
     cmd_hook_path: str
@@ -71,9 +75,20 @@ class InstallContext:
 
 
 @dataclass(frozen=True)
+class PosixInstallContext:
+    install_root: str
+    hook_path: str
+    safe_del_path: str
+    profile_targets: list[ProfileTarget]
+
+
+InstallContext: TypeAlias = WindowsInstallContext | PosixInstallContext
+
+
+@dataclass(frozen=True)
 class InstallResult:
     written_files: list[str]
-    updated_profiles: list[str]
+    updated_profiles: list[ProfileTarget]
     cmd_autorun_value: str
 
 
@@ -127,11 +142,17 @@ def parse_cli_args(argv: Sequence[str]) -> None:
 def prepare_install_context() -> InstallContext:
     safe_del_path = resolve_safe_del_path()
     install_root = os.path.join(os.path.expanduser("~"), ".safe-del")
+    if os.name == "nt":
+        return prepare_windows_install_context(install_root, safe_del_path)
+    return prepare_posix_install_context(install_root, safe_del_path)
+
+
+def prepare_windows_install_context(install_root: str, safe_del_path: str) -> WindowsInstallContext:
     powershell_hook_path = os.path.join(install_root, "safe-del-hook.ps1")
     cmd_hook_path = os.path.join(install_root, "safe-del-cmd-init.cmd")
-    profile_targets = resolve_profile_targets()
+    profile_targets = resolve_windows_profile_targets()
     existing_cmd_autorun = read_cmd_autorun_value()
-    return InstallContext(
+    return WindowsInstallContext(
         install_root=install_root,
         powershell_hook_path=powershell_hook_path,
         cmd_hook_path=cmd_hook_path,
@@ -141,14 +162,45 @@ def prepare_install_context() -> InstallContext:
     )
 
 
+def prepare_posix_install_context(install_root: str, safe_del_path: str) -> PosixInstallContext:
+    hook_path = os.path.join(install_root, "safe-del-posix.sh")
+    profile_targets = resolve_posix_profile_targets()
+    return PosixInstallContext(
+        install_root=install_root,
+        hook_path=hook_path,
+        safe_del_path=safe_del_path,
+        profile_targets=profile_targets,
+    )
+
+
 def resolve_safe_del_path() -> str:
-    safe_del_path = shutil.which("safe-del")
-    if safe_del_path is None:
-        raise CliUsageError("未找到 safe-del，请先执行 `pip install -e .` 或 `pip install .`。")
-    return os.path.abspath(safe_del_path)
+    candidate_paths = [resolve_sibling_safe_del_path()]
+    path_value = shutil.which("safe-del")
+    if path_value is not None:
+        candidate_paths.append(path_value)
+
+    for candidate_path in candidate_paths:
+        if candidate_path != "" and os.path.exists(candidate_path):
+            return os.path.abspath(candidate_path)
+
+    raise CliUsageError("未找到 safe-del，请先执行 `pip install -e .` 或 `pip install .`。")
 
 
-def resolve_profile_targets() -> list[ProfileTarget]:
+def resolve_sibling_safe_del_path() -> str:
+    script_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+    executable_names = ["safe-del"]
+    if os.name == "nt":
+        executable_names.append("safe-del.exe")
+
+    for executable_name in executable_names:
+        candidate_path = os.path.join(script_dir, executable_name)
+        if os.path.exists(candidate_path):
+            return candidate_path
+
+    return ""
+
+
+def resolve_windows_profile_targets() -> list[ProfileTarget]:
     profile_targets: list[ProfileTarget] = []
     seen_paths: set[str] = set()
 
@@ -176,6 +228,35 @@ def resolve_profile_targets() -> list[ProfileTarget]:
     return [ProfileTarget(shell_name="powershell", path=fallback_path)]
 
 
+def resolve_posix_profile_targets() -> list[ProfileTarget]:
+    home_path = os.path.expanduser("~")
+    profile_targets: list[ProfileTarget] = []
+    seen_paths: set[str] = set()
+
+    for profile_target in build_posix_profile_candidates(home_path):
+        identity = os.path.normcase(os.path.normpath(profile_target.path))
+        if identity in seen_paths:
+            continue
+
+        seen_paths.add(identity)
+        profile_targets.append(profile_target)
+
+    return profile_targets
+
+
+def build_posix_profile_candidates(home_path: str) -> list[ProfileTarget]:
+    candidates = [
+        ProfileTarget(shell_name="bash", path=os.path.join(home_path, ".bashrc")),
+        ProfileTarget(shell_name="sh", path=os.path.join(home_path, ".profile")),
+    ]
+
+    current_shell = os.path.basename(os.environ.get("SHELL", ""))
+    if current_shell == "zsh" or os.path.exists(os.path.join(home_path, ".zshrc")):
+        candidates.append(ProfileTarget(shell_name="zsh", path=os.path.join(home_path, ".zshrc")))
+
+    return candidates
+
+
 def query_profile_path(shell_name: str) -> str:
     if shutil.which(shell_name) is None:
         return ""
@@ -195,6 +276,8 @@ def query_profile_path(shell_name: str) -> str:
 
 
 def read_cmd_autorun_value() -> str:
+    import winreg
+
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CMD_AUTORUN_KEY, 0, winreg.KEY_READ) as key:
             value, _ = winreg.QueryValueEx(key, CMD_AUTORUN_NAME)
@@ -209,7 +292,13 @@ def read_cmd_autorun_value() -> str:
 
 
 def install_command_mapping(context: InstallContext) -> InstallResult:
-    written_files = write_runtime_files(context)
+    if isinstance(context, WindowsInstallContext):
+        return install_windows_command_mapping(context)
+    return install_posix_command_mapping(context)
+
+
+def install_windows_command_mapping(context: WindowsInstallContext) -> InstallResult:
+    written_files = write_windows_runtime_files(context)
     updated_profiles = install_powershell_profiles(context)
     cmd_autorun_value = install_cmd_autorun(context)
     return InstallResult(
@@ -219,7 +308,17 @@ def install_command_mapping(context: InstallContext) -> InstallResult:
     )
 
 
-def write_runtime_files(context: InstallContext) -> list[str]:
+def install_posix_command_mapping(context: PosixInstallContext) -> InstallResult:
+    written_files = write_posix_runtime_files(context)
+    updated_profiles = install_posix_profiles(context)
+    return InstallResult(
+        written_files=written_files,
+        updated_profiles=updated_profiles,
+        cmd_autorun_value="",
+    )
+
+
+def write_windows_runtime_files(context: WindowsInstallContext) -> list[str]:
     os.makedirs(context.install_root, exist_ok=True)
 
     powershell_hook = build_powershell_hook(context.safe_del_path)
@@ -229,6 +328,13 @@ def write_runtime_files(context: InstallContext) -> list[str]:
     write_text_file(context.cmd_hook_path, cmd_hook)
 
     return [context.powershell_hook_path, context.cmd_hook_path]
+
+
+def write_posix_runtime_files(context: PosixInstallContext) -> list[str]:
+    os.makedirs(context.install_root, exist_ok=True)
+    hook = build_posix_hook(context.safe_del_path)
+    write_text_file(context.hook_path, hook)
+    return [context.hook_path]
 
 
 def build_powershell_hook(safe_del_path: str) -> str:
@@ -391,6 +497,45 @@ doskey unlink="{safe_del_path}" $*
 """
 
 
+def build_posix_hook(safe_del_path: str) -> str:
+    escaped_path = shell_single_quote(safe_del_path)
+    return f"""\
+SAFE_DEL_EXECUTABLE={escaped_path}
+
+safe_del_command() {{
+    "$SAFE_DEL_EXECUTABLE" "$@"
+}}
+
+rm() {{
+    safe_del_command "$@"
+}}
+
+rmdir() {{
+    safe_del_command "$@"
+}}
+
+unlink() {{
+    safe_del_command "$@"
+}}
+
+del() {{
+    safe_del_command "$@"
+}}
+
+erase() {{
+    safe_del_command "$@"
+}}
+
+rd() {{
+    safe_del_command "$@"
+}}
+"""
+
+
+def shell_single_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
 def write_text_file(path: str, content: str) -> None:
     directory = os.path.dirname(path)
     if directory != "":
@@ -406,17 +551,32 @@ def select_file_encoding(path: str) -> str:
     return "utf-8"
 
 
-def install_powershell_profiles(context: InstallContext) -> list[str]:
-    updated_profiles: list[str] = []
+def install_powershell_profiles(context: WindowsInstallContext) -> list[ProfileTarget]:
+    updated_profiles: list[ProfileTarget] = []
     for profile_target in context.profile_targets:
         install_powershell_profile(profile_target.path, context.powershell_hook_path)
-        updated_profiles.append(profile_target.path)
+        updated_profiles.append(profile_target)
+    return updated_profiles
+
+
+def install_posix_profiles(context: PosixInstallContext) -> list[ProfileTarget]:
+    updated_profiles: list[ProfileTarget] = []
+    for profile_target in context.profile_targets:
+        install_posix_profile(profile_target.path, context.hook_path)
+        updated_profiles.append(profile_target)
     return updated_profiles
 
 
 def install_powershell_profile(profile_path: str, hook_path: str) -> None:
     existing = read_text_file(profile_path)
-    block = build_profile_block(hook_path)
+    block = build_powershell_profile_block(hook_path)
+    updated = upsert_profile_block(existing, block)
+    write_text_file(profile_path, updated)
+
+
+def install_posix_profile(profile_path: str, hook_path: str) -> None:
+    existing = read_text_file(profile_path)
+    block = build_posix_profile_block(hook_path)
     updated = upsert_profile_block(existing, block)
     write_text_file(profile_path, updated)
 
@@ -429,10 +589,18 @@ def read_text_file(path: str) -> str:
         return file.read()
 
 
-def build_profile_block(hook_path: str) -> str:
+def build_powershell_profile_block(hook_path: str) -> str:
     escaped_path = hook_path.replace("'", "''")
     return f"""{PROFILE_MARKER_START}
 . '{escaped_path}'
+{PROFILE_MARKER_END}
+"""
+
+
+def build_posix_profile_block(hook_path: str) -> str:
+    escaped_path = shell_single_quote(hook_path)
+    return f"""{PROFILE_MARKER_START}
+. {escaped_path}
 {PROFILE_MARKER_END}
 """
 
@@ -457,7 +625,9 @@ def join_profile_sections(prefix: str, block: str, suffix: str) -> str:
     return "\n\n".join(sections) + "\n"
 
 
-def install_cmd_autorun(context: InstallContext) -> str:
+def install_cmd_autorun(context: WindowsInstallContext) -> str:
+    import winreg
+
     updated_value = build_cmd_autorun_value(context.existing_cmd_autorun, context.cmd_hook_path)
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, CMD_AUTORUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
         winreg.SetValueEx(key, CMD_AUTORUN_NAME, 0, winreg.REG_SZ, updated_value)
@@ -483,13 +653,14 @@ def format_install_message(result: InstallResult) -> str:
         lines.append(f"  {path}")
 
     lines.append("")
-    lines.append("已更新 PowerShell profile:")
-    for path in result.updated_profiles:
-        lines.append(f"  {path}")
+    lines.append("已更新 shell profile:")
+    for profile_target in result.updated_profiles:
+        lines.append(f"  {profile_target.shell_name}: {profile_target.path}")
 
-    lines.append("")
-    lines.append("cmd AutoRun:")
-    lines.append(f"  {result.cmd_autorun_value}")
+    if result.cmd_autorun_value != "":
+        lines.append("")
+        lines.append("cmd AutoRun:")
+        lines.append(f"  {result.cmd_autorun_value}")
     return "\n".join(lines)
 
 
