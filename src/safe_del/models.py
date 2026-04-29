@@ -6,6 +6,7 @@ class DeleteRequest:
     targets: list[str]
     recursive: bool
     quiet: bool
+    ignore_missing: bool
 
 
 @dataclass(frozen=True)

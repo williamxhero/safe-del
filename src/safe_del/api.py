@@ -4,8 +4,13 @@ from safe_del.service import move_to_trash
 from safe_del.validator import validate_delete_targets
 
 
-def delete_targets(targets: list[str], recursive: bool = False) -> DeleteResult:
+def delete_targets(targets: list[str], recursive: bool = False, ignore_missing: bool = False) -> DeleteResult:
     validate_delete_targets(targets)
-    request = DeleteRequest(targets=targets, recursive=recursive, quiet=False)
+    request = DeleteRequest(
+        targets=targets,
+        recursive=recursive,
+        quiet=False,
+        ignore_missing=ignore_missing,
+    )
     resolved_targets = resolve_targets(request)
     return move_to_trash(resolved_targets)

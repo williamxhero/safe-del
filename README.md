@@ -1,8 +1,10 @@
 # safe-del
 
-`safe-del` 是一个跨平台安全删除命令，当前支持 Windows 和 Ubuntu/Linux。
+为 AI 和 Agent 打造的 删除工具。当我的 D 盘被 Codex 彻底清空，花了 500 块钱也没有恢复数据后，我痛定思痛，让 Codex 帮我写了这个，专门面向 AI，XX Code 和 AI Agent 的删除工具。
 
-它不会直接永久删除文件，而是把目标移动到系统回收站。它适合替代常见的删除命令，当 AI、Agents 操作电脑的时候，降低误删风险。
+`safe-del` 是跨平台安全删除命令，当前支持 Windows 和 Ubuntu/Linux。
+
+它不会直接永久删除文件，而是把目标移动到系统回收站。
 
 ## 安装
 
@@ -56,25 +58,21 @@ safe-del ~/work/build
 
 兼容的常见参数：
 
-- `/q`
-- `/f`
-- `/p`
-- `/s`
-- `/a`
-- `/a:...`
-- `-f`
-- `-i`
-- `-r`
-- `-R`
-- `-rf`
-- `-fr`
-- `--force`
-- `--recursive`
-- `--interactive=never`
+- Windows `del`、`erase`: `/q`、`/f`、`/p`、`/s`、`/a`、`/a:...`
+- Windows `rd`、`rmdir`: `/s`、`/q`
+- GNU `rm`: `-f`、`-i`、`-I`、`-r`、`-R`、`-d`、`-v`、`--force`、`--interactive`、`--interactive=never`、`--interactive=once`、`--interactive=always`、`--one-file-system`、`--no-preserve-root`、`--preserve-root`、`--preserve-root=all`、`--recursive`、`--dir`、`--verbose`
+- GNU `rmdir`: `-p`、`-v`、`--parents`、`--verbose`、`--ignore-fail-on-non-empty`
+- GNU `unlink`: `--help`、`--version`
+- safe-del 通用: `--quiet`、`--help`、`--version`、`--`
+- 短参数可以组合，例如 `-rf`、`-fr`、`-rvf`
 
 说明：
 
 - `/s`、`-r`、`-R`、`--recursive` 会让通配符递归匹配子目录。
+- `-f`、`--force` 会忽略未匹配目标。
+- `-i`、`-I`、`--interactive...` 会被接受，但 safe-del 当前不会交互确认。
+- `-d`、`--dir`、`-p`、`--parents`、`--one-file-system`、`--preserve-root...`、`--ignore-fail-on-non-empty` 会被接受以兼容原命令调用；safe-del 仍只处理显式传入的目标。
+- `--no-preserve-root` 会被接受，但不会关闭 safe-del 的根目录保护。
 - 直接传入已存在的目录时，会把整个目录移动到回收站。
 - 没有匹配到的目标会单独列出，并返回非零退出码。
 - 为防止误删，Windows 下禁止删除整个分区或分区根下全部内容，例如 `C:`、`D:\`、`C:\*`、`C:\*.*`、`E:\**`。
@@ -82,7 +80,7 @@ safe-del ~/work/build
 
 ## 本机命令映射
 
-仓库现在提供了 `safe-del-install`，用于把当前用户常见的交互式删除命令映射到 `safe-del`。
+仓库现在提供了 `safe-del-install`，用于把当前用户常见的交互式删除命令映射到 `safe-del`。让 AI 就算直接调用系统删除命令，也会由 safe-del 接管，以防不测。
 
 执行：
 
@@ -118,6 +116,8 @@ Ubuntu/Linux 安装后会覆盖这些交互式 shell 命令：
 - `erase`
 - `rd`
 
+其中 `rm`、`del`、`erase` 适合按删除文件习惯使用；`rmdir`、`rd` 适合按删除目录习惯使用；`unlink` 适合按删除单个路径习惯使用。所有命令最终都会进入同一个 safe-del 参数兼容层。
+
 Ubuntu/Linux 安装动作包括：
 
 - 在 `~/.safe-del/` 下写入 POSIX shell 初始化脚本
@@ -148,8 +148,11 @@ rd /s /q .\dist
 ```bash
 safe-del -rf ~/work/build
 safe-del --recursive '*.tmp'
+rm -fv missing.log old.log
+rm --interactive=never -rf ~/work/build
 rm -rf ~/work/build
 rmdir ~/empty-dir
+rmdir -pv ~/empty-parent/empty-child
 unlink ~/old-link
 ```
 
@@ -172,5 +175,8 @@ Ubuntu/Linux 下禁止删除系统根目录或根目录下全部内容。
 常见兼容参数：
 /q 静默模式
 /s -r -R --recursive 通配符递归匹配子目录
-/f /p /a /a:... -f --force --interactive=never 接受并兼容，当前不改变删除行为
+-f --force 忽略未匹配目标
+-i -I --interactive... 接受并兼容，当前不交互确认
+-d --dir -p --parents -v --verbose --one-file-system --preserve-root... --ignore-fail-on-non-empty 接受并兼容
+/f /p /a /a:... 接受并兼容
 ```

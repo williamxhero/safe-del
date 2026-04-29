@@ -2,7 +2,14 @@ import sys
 from collections.abc import Sequence
 
 from safe_del.api import delete_targets
-from safe_del.arguments import HELP_TEXT, CliUsageError, HelpRequested, parse_cli_args
+from safe_del.arguments import (
+    HELP_TEXT,
+    VERSION_TEXT,
+    CliUsageError,
+    HelpRequested,
+    VersionRequested,
+    parse_cli_args,
+)
 from safe_del.models import DeleteResult
 from safe_del.validator import DangerousTargetError
 
@@ -16,13 +23,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     except HelpRequested:
         print(HELP_TEXT)
         return 0
+    except VersionRequested:
+        print(VERSION_TEXT)
+        return 0
     except CliUsageError as exc:
         print(f"参数错误: {exc}", file=sys.stderr)
         print("使用 `safe-del --help` 查看帮助。", file=sys.stderr)
         return 2
 
     try:
-        result = delete_targets(targets=request.targets, recursive=request.recursive)
+        result = delete_targets(
+            targets=request.targets,
+            recursive=request.recursive,
+            ignore_missing=request.ignore_missing,
+        )
     except DangerousTargetError as exc:
         print(f"参数错误: {exc}", file=sys.stderr)
         return 2

@@ -15,6 +15,8 @@ def resolve_targets(request: DeleteRequest) -> ResolvedTargets:
     for target in request.targets:
         expanded_paths = _expand_target(target, request.recursive)
         if not expanded_paths:
+            if request.ignore_missing:
+                continue
             missing_inputs.append(target)
             continue
 
