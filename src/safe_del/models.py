@@ -26,3 +26,10 @@ class DeleteResult:
     moved_paths: list[str]
     missing_inputs: list[str]
     failures: list[DeleteFailure]
+
+
+@dataclass(frozen=True)
+class TrashCleanResult:
+    cleaned_roots: list[str]
+    deleted_count: int
+    failures: list[DeleteFailure]
